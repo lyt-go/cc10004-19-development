@@ -85,3 +85,6 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 校验脚本打包产物（verify/*.ts 为可复核源码） =====
+verify/*.mjs

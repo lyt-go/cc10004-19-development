@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { downloadEntries, listEntries, moduleMeta, runAction as applyAction } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import PublishTraceModal from '@/views/heat-publish/PublishTraceModal'
 
 const meta = moduleMeta('dataviz')
 const columns = [
@@ -25,26 +26,13 @@ const statuses = [
   "已发布",
   "已下线"
 ]
-const stats = [
-  {
-    "label": "图表配置总数",
-    "value": 0
-  },
-  {
-    "label": "已发布图表",
-    "value": 0
-  },
-  {
-    "label": "配置评审中",
-    "value": 0
-  }
-]
 
 export default function DatavizView() {
   const [rows, setRows] = useState<EntryRow[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
+  const [traceCode, setTraceCode] = useState<string | null>(null)
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
   const reload = useCallback(() => {
@@ -62,6 +50,12 @@ export default function DatavizView() {
     reload()
   }, [reload])
 
+  const stats = useMemo(() => [
+    { label: "图表配置总数", value: rows.length },
+    { label: "已发布图表", value: rows.filter((row) => String(row.status) === "已发布").length },
+    { label: "配置评审中", value: rows.filter((row) => String(row.status) === "配置评审中").length },
+  ], [rows])
+
   function runAction(action: string, row: EntryRow) {
     setErrorMessage('')
     const result = applyAction(meta.key, Number(row.id), action)
@@ -77,7 +71,7 @@ export default function DatavizView() {
       <header className="page-head">
         <div>
           <h2>可视化配置管理</h2>
-          <p className="page-desc">管理数据产品的可视化图表配置，定义图表类型、数据源和交互样式。</p>
+          <p className="page-desc">管理数据产品的可视化图表配置，定义图表类型、数据源和交互样式；从热力方案发布的图表在「热力图谱发布」工作台固定版本。</p>
         </div>
         <div className="page-actions">
           <button className="btn primary" type="button" onClick={() => setErrorMessage('图表配置登记入口尚未接入审批流')}>
@@ -130,19 +124,25 @@ export default function DatavizView() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={String(row.id)}>
-              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
-              <td>{row.status}</td>
-              <td className="row-actions">
-                {actions.map((action) => (
-                  <button key={action} className="link" type="button" onClick={() => runAction(action, row)}>
-                    {action}
+          {rows.map((row) => {
+            const code = String(row['配置编号'])
+            return (
+              <tr key={String(row.id)}>
+                {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+                <td>{row.status}</td>
+                <td className="row-actions">
+                  {actions.map((action) => (
+                    <button key={action} className="link" type="button" onClick={() => runAction(action, row)}>
+                      {action}
+                    </button>
+                  ))}
+                  <button className="link" type="button" onClick={() => setTraceCode(code)}>
+                    发布追溯
                   </button>
-                ))}
-              </td>
-            </tr>
-          ))}
+                </td>
+              </tr>
+            )
+          })}
           {rows.length === 0 && (
             <tr>
               <td className="empty-state" colSpan={columns.length + 2}>暂无可视化配置数据，可先登记图表配置</td>
@@ -155,6 +155,10 @@ export default function DatavizView() {
         <span>共 {total} 条可视化配置记录</span>
         {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
+
+      {traceCode && (
+        <PublishTraceModal code={traceCode} kind="dataviz" onClose={() => setTraceCode(null)} />
+      )}
     </section>
   )
 }

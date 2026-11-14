@@ -70,5 +70,38 @@ npm run build
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
 - 想回到初始数据：清掉浏览器里 `data-product-ops:entries` 这一项，或调用 `resetModule(模块)`。
 
+## 热力图谱发布（heat-publish）
+
+`frontend/src/views/heat-publish/` 是从热力方案生成图表草稿并发布的工作台，领域规则集中在
+`frontend/src/api/heat-publish-service.ts`，状态持久化在独立的 localStorage 键
+`data-product-ops:heat-publish`（类型见 `frontend/src/data/heat-publish/types.ts`）。
+
+关键规则：
+
+- **发布粒度**：以「热力方案 × 结果版本 × 图表配置」为最小发布单元；热力重算只追加不可变新版本。
+- **最小样本闸门**：版本样本数低于方案最小样本时只能保存图表草稿，发布按钮禁用并由服务层硬拦截；
+  覆盖率以「实际样本 / 最小样本」+ 达标进度条展示。
+- **版本固定**：发布记录保存方案版本与图表配置双侧快照，后续重算或改配置都不影响已上线图表。
+- **幂等与留档**：同一热力版本重复发布复用原记录（只产生一个当前图表）；同图表配置发布新版本时，
+  旧记录按发布时间自动归档。
+- **双向追溯**：热力分析页与可视化配置页均有「发布追溯」入口，查到的是同一批发布记录。
+- **原子性**：所有写操作先在克隆状态上完成全部校验再一次性落盘，失败整体回滚，两侧不产生半成品。
+- **批次与回执**：发布与外部回执都挂在当前批次下；支持上传 CSV/JSON 回执，解析后进入当前批并回填
+  版本覆盖率，坏行、重复编号或幽灵版本整批拒绝；批次关闭后禁止再写入。
+
+工作台页展示 HEAT 侧的页面名称、热力类型、聚合级别、时间范围、最小样本，以及 DATA 侧的图表类型、
+数据源、X/Y 轴字段、刷新间隔，并附双侧源字段核对表。
+
+### 端到端校验
+
+`verify/heat-publish.e2e.ts` 用 localStorage mock 跑通上述全部规则（24 项断言）：
+
+```bash
+cd verify
+../frontend/node_modules/.bin/esbuild heat-publish.e2e.ts --bundle --platform=node \
+  --format=esm --alias:@=../frontend/src --outfile=heat-publish.e2e.mjs
+node heat-publish.e2e.mjs
+```
+
 领域：数据工程
 子方向：数据分析与数据应用

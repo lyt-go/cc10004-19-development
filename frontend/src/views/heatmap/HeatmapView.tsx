@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { downloadEntries, listEntries, moduleMeta, runAction as applyAction } from '@/api/local-service'
+import { currentVersionOfHeat } from '@/api/heat-publish-service'
 import type { EntryRow } from '@/data/types'
+import PublishTraceModal from '@/views/heat-publish/PublishTraceModal'
 
 const meta = moduleMeta('heatmap')
 const columns = [
@@ -25,26 +27,13 @@ const statuses = [
   "已启用",
   "已归档"
 ]
-const stats = [
-  {
-    "label": "热力方案总数",
-    "value": 0
-  },
-  {
-    "label": "已启用方案",
-    "value": 0
-  },
-  {
-    "label": "方案评审中",
-    "value": 0
-  }
-]
 
 export default function HeatmapView() {
   const [rows, setRows] = useState<EntryRow[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
+  const [traceCode, setTraceCode] = useState<string | null>(null)
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
   const reload = useCallback(() => {
@@ -62,6 +51,12 @@ export default function HeatmapView() {
     reload()
   }, [reload])
 
+  const stats = useMemo(() => [
+    { label: "热力方案总数", value: rows.length },
+    { label: "已启用方案", value: rows.filter((row) => String(row.status) === "已启用").length },
+    { label: "方案评审中", value: rows.filter((row) => String(row.status) === "方案评审中").length },
+  ], [rows])
+
   function runAction(action: string, row: EntryRow) {
     setErrorMessage('')
     const result = applyAction(meta.key, Number(row.id), action)
@@ -77,7 +72,7 @@ export default function HeatmapView() {
       <header className="page-head">
         <div>
           <h2>热力分析管理</h2>
-          <p className="page-desc">定义页面和功能的热力分析方案，配置聚合级别、时间范围和可视化参数。</p>
+          <p className="page-desc">定义页面和功能的热力分析方案，配置聚合级别、时间范围和可视化参数；图表发布请前往「热力图谱发布」工作台。</p>
         </div>
         <div className="page-actions">
           <button className="btn primary" type="button" onClick={() => setErrorMessage('热力方案登记入口尚未接入审批流')}>
@@ -126,26 +121,41 @@ export default function HeatmapView() {
           <tr>
             {columns.map((column) => <th key={column}>{column}</th>)}
             <th>当前状态</th>
+            <th>已发布固定版本</th>
             <th>可执行动作</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={String(row.id)}>
-              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
-              <td>{row.status}</td>
-              <td className="row-actions">
-                {actions.map((action) => (
-                  <button key={action} className="link" type="button" onClick={() => runAction(action, row)}>
-                    {action}
+          {rows.map((row) => {
+            const code = String(row['方案编号'])
+            const current = currentVersionOfHeat(code)
+            return (
+              <tr key={String(row.id)}>
+                {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+                <td>{row.status}</td>
+                <td>
+                  {current ? (
+                    <span className="tag tag-ok">第 {current.heatVersionNo} 版 · {current.dataVizCode}</span>
+                  ) : (
+                    <span className="muted">未发布</span>
+                  )}
+                </td>
+                <td className="row-actions">
+                  {actions.map((action) => (
+                    <button key={action} className="link" type="button" onClick={() => runAction(action, row)}>
+                      {action}
+                    </button>
+                  ))}
+                  <button className="link" type="button" onClick={() => setTraceCode(code)}>
+                    发布追溯
                   </button>
-                ))}
-              </td>
-            </tr>
-          ))}
+                </td>
+              </tr>
+            )
+          })}
           {rows.length === 0 && (
             <tr>
-              <td className="empty-state" colSpan={columns.length + 2}>暂无热力分析数据，可先登记热力方案</td>
+              <td className="empty-state" colSpan={columns.length + 3}>暂无热力分析数据，可先登记热力方案</td>
             </tr>
           )}
         </tbody>
@@ -155,6 +165,10 @@ export default function HeatmapView() {
         <span>共 {total} 条热力分析记录</span>
         {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
+
+      {traceCode && (
+        <PublishTraceModal code={traceCode} kind="heat" onClose={() => setTraceCode(null)} />
+      )}
     </section>
   )
 }
